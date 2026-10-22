@@ -6,11 +6,13 @@ import urllib.parse
 from datetime import date, datetime, time, timedelta
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort
-from database import init_db, get_db_connection
+from database import init_db, get_db_connection, release_leaked_connections
 from voice import parse_command, MISTAKE_WORDS
 from hata import hata_haritasi, claude_istegi
 
 app = Flask(__name__)
+# Hata ya da erken dönüş yüzünden kapatılmamış bağlantılar havuza geri dönsün
+app.teardown_request(lambda exc: release_leaked_connections())
 
 IS_PRODUCTION = bool(os.environ.get('DATABASE_URL'))
 
