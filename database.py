@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import threading
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,38 +27,92 @@ class SQLiteDBWrapper:
         self.conn.close()
 
 
+# Supabase'e her istekte yeni bağlantı açmak ~0.7 sn sürüyor; açık bağlantılar havuzda saklanır.
+_pool = None
+_pool_lock = threading.Lock()
+_borrowed = set()  # havuzdan alınıp henüz geri verilmemiş bağlantılar
+
+
+def _get_pool(db_url):
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            from psycopg2.pool import ThreadedConnectionPool
+            # psycopg2 en fazla minconn kadar bağlantıyı saklar; sync worker'a tek bağlantı yeter.
+            # keepalive: uzun süre boşta kalan bağlantı sessizce kopmasın
+            _pool = ThreadedConnectionPool(1, 4, db_url, keepalives=1, keepalives_idle=30,
+                                           keepalives_interval=10, keepalives_count=3)
+    return _pool
+
+
 class PostgresDBWrapper:
-    """PostgreSQL için psycopg2 DBWrapper."""
-    def __init__(self, conn):
+    """PostgreSQL için psycopg2 DBWrapper. close() bağlantıyı havuza geri verir."""
+    def __init__(self, conn, pool=None):
         self.conn = conn
+        self.pool = pool
+        self.used = False
+        if pool is not None:
+            _borrowed.add(self)
 
     def execute(self, query, params=None):
+        import psycopg2
         from psycopg2.extras import DictCursor
-        cur = self.conn.cursor(cursor_factory=DictCursor)
-        if params:
-            cur.execute(query, params)
-        else:
-            cur.execute(query)
+        for attempt in range(5):
+            try:
+                cur = self.conn.cursor(cursor_factory=DictCursor)
+                if params:
+                    cur.execute(query, params)
+                else:
+                    cur.execute(query)
+                break
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                # Havuzdaki bağlantıyı sunucu kapatmış olabilir. Yalnızca ilk sorguda
+                # yenisiyle tekrar dene; işlem ortasında denemek veriyi bozabilir.
+                if self.pool is None or self.used or attempt == 4:
+                    raise
+                self.pool.putconn(self.conn, close=True)
+                self.conn = self.pool.getconn()
+        self.used = True
         return cur
 
     def commit(self):
         self.conn.commit()
 
     def close(self):
-        self.conn.close()
+        if self.conn is None:
+            return
+        conn, self.conn = self.conn, None
+        _borrowed.discard(self)
+        if self.pool is None:
+            conn.close()
+        else:
+            # putconn yarım kalan işlemi geri alır, kopmuş bağlantıyı atar
+            self.pool.putconn(conn, close=bool(conn.closed))
+
+
+def release_leaked_connections():
+    """İstek sonunda kapatılmamış bağlantıları havuza geri verir (hata/erken dönüş yolları).
+    shortcut: gunicorn sync worker'da bir anda tek istek olduğunu varsayar; thread'li worker'a geçilirse istek başına izlenmeli."""
+    for wrapper in list(_borrowed):
+        wrapper.close()
 
 
 def get_db_connection():
     db_url = os.getenv('DATABASE_URL')
-    
+
     # Render veya canlı ortamda PostgreSQL varsa
     if db_url and db_url.startswith(('postgres://', 'postgresql://')):
         import psycopg2
+        from psycopg2.pool import PoolError
         # Render bazen postgres:// verir, psycopg2 postgresql:// ister
         if db_url.startswith('postgres://'):
             db_url = db_url.replace('postgres://', 'postgresql://', 1)
-        conn = psycopg2.connect(db_url)
-        return PostgresDBWrapper(conn)
+        pool = _get_pool(db_url)
+        try:
+            return PostgresDBWrapper(pool.getconn(), pool)
+        except PoolError:
+            # Havuz doluysa eski yol: tek seferlik bağlantı
+            return PostgresDBWrapper(psycopg2.connect(db_url))
     else:
         # Yerel geliştirme ortamında SQLite kullan
         db_path = os.path.join(os.path.dirname(__file__), 'ozelders.db')
