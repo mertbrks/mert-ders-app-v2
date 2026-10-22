@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf_field, mistake_picker with context %}
+
+{% block title %}Takvim{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/tr.global.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Takvim</h1>
+        <p class="sub">{% if is_admin %}Boş bir saate tıklayarak ders ekle, derse tıklayarak konu ve ödev gir.{% else %}Derse tıklayarak konu ve ödevleri gör.{% endif %}</p>
+    </div>
+    {% if is_admin %}
+    <div class="actions">
+        <button type="button" class="btn btn-primary" data-open="addLessonModal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ders planla</button>
+    </div>
+    {% endif %}
+</div>
+
+<section class="panel">
+    <div class="panel-head">
+        <div class="cal-legend" aria-label="Renk açıklaması">
+            <span class="status planlandi">Planlandı</span>
+            <span class="status yapildi">Yapıldı</span>
+            <span class="status iptal">İptal</span>
+        </div>
+    </div>
+    <div class="panel-body">
+        <div id="cal-error" class="inline-error" role="alert" hidden>
+            <span>Dersler yüklenemedi. İnternet bağlantını kontrol et.</span>
+            <button type="button" class="btn btn-sm" id="cal-retry">Tekrar dene</button>
+        </div>
+        <div id="cal-loading" aria-busy="true" aria-label="Takvim yükleniyor">
+            <div class="skeleton" style="height:36px;width:260px;margin-bottom:16px"></div>
+            <div class="skeleton" style="height:520px"></div>
+        </div>
+        <div id="calendar"></div>
+    </div>
+</section>
+
+{% if is_admin %}
+<dialog class="modal" id="addLessonModal" aria-labelledby="addLessonTitle">
+    <form action="{{ url_for('add_lesson') }}" method="POST">
+        {{ csrf_field() }}
+        <div class="modal-head">
+            <h2 id="addLessonTitle">Ders planla</h2>
+            <button type="button" class="icon-btn" data-close aria-label="Kapat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">
+            {% if students %}
+            <div class="form-stack">
+                <label class="field">
+                    <span>Öğrenci</span>
+                    <select name="student_id" class="input" required>
+                        <option value="">Seç…</option>
+                        {% for student in students %}
+                        <option value="{{ student.id }}">{{ student.full_name }}{% if student.grade_level %} · {{ student.grade_level }}{% endif %} · {{ student.default_duration or 60 }} dk</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Tarih ve saat</span>
+                    <input type="datetime-local" name="lesson_date" id="add_lesson_date" class="input" step="900" required>
+                </label>
+                <label class="field">
+                    <span>Tekrar</span>
+                    <select name="weeks" class="input">
+                        <option value="1">Tek seferlik</option>
+                        <option value="4">4 hafta, her hafta aynı saatte</option>
+                        <option value="8">8 hafta, her hafta aynı saatte</option>
+                        <option value="12">12 hafta, her hafta aynı saatte</option>
+                    </select>
+                </label>
+                <p class="hint">O saatte başka bir ders varsa o hafta atlanır, diğerleri eklenir.</p>
+            </div>
+            {% else %}
+            <p>Ders planlamak için önce bir öğrenci eklemelisin.</p>
+            {% endif %}
+        </div>
+        <div class="modal-foot">
+            <button type="button" class="btn btn-quiet" data-close>Vazgeç</button>
+            {% if students %}
+            <button type="submit" class="btn btn-primary">Takvime ekle</button>
+            {% else %}
+            <a href="{{ url_for('students') }}" class="btn btn-primary">Öğrenci ekle</a>
+            {% endif %}
+        </div>
+    </form>
+</dialog>
+{% endif %}
+
+<dialog class="modal" id="lessonDetailModal" aria-labelledby="detailTitle">
+    <form action="{{ url_for('update_lesson') }}" method="POST">
+        {{ csrf_field() }}
+        <input type="hidden" name="lesson_id" id="detail_lesson_id">
+        <div class="modal-head">
+            <div>
+                <h2 id="detailTitle">Ders</h2>
+                <p class="hint num" id="detailWhen"></p>
+            </div>
+            <button type="button" class="icon-btn" data-close aria-label="Kapat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">
+            <fieldset class="form-stack" style="border:0;padding:0;margin:0" {% if not is_admin %}disabled{% endif %}>
+                <label class="field">
+                    <span>Durum</span>
+                    <select name="status" id="detail_status" class="input">
+                        <option value="planlandi">Planlandı</option>
+                        <option value="yapildi">Yapıldı</option>
+                        <option value="iptal">İptal edildi</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>İşlenen konu</span>
+                    <input type="text" name="topic" id="detail_topic" class="input" placeholder="Örn. Limit ve süreklilik">
+                </label>
+                <label class="field">
+                    <span>Ödev</span>
+                    <input type="text" name="homework" id="detail_homework" class="input" placeholder="Örn. Test 4 ve 5">
+                </label>
+                <label class="field">
+                    <span>Not</span>
+                    <textarea name="notes" id="detail_notes" rows="3" class="input" placeholder="Nerede zorlandı, sonraki derste ne yapılacak"></textarea>
+                </label>
+                {% if is_admin %}
+                <div id="detail_mistakes" hidden>{{ mistake_picker('Bu derste hangi hatalar oldu?') }}</div>
+                {% endif %}
+            </fieldset>
+        </div>
+        <div class="modal-foot">
+            {% if is_admin %}
+            <button type="submit" form="deleteLessonForm" class="btn btn-danger spacer">Dersi sil</button>
+            <button type="button" class="btn btn-quiet" data-close>Vazgeç</button>
+            <button type="submit" class="btn btn-primary">Kaydet</button>
+            {% else %}
+            <button type="button" class="btn" data-close>Kapat</button>
+            {% endif %}
+        </div>
+    </form>
+</dialog>
+
+{% if is_admin %}
+<form id="deleteLessonForm" method="POST" data-confirm="Bu ders ve varsa tahsilat kaydı silinecek. Emin misin?">
+    {{ csrf_field() }}
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const isAdmin = {{ 'true' if is_admin else 'false' }};
+    const calendarEl = document.getElementById('calendar');
+    const loadingEl = document.getElementById('cal-loading');
+    const errorEl = document.getElementById('cal-error');
+    const fmt = new Intl.DateTimeFormat('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+    if (typeof FullCalendar === 'undefined') {
+        loadingEl.hidden = true;
+        errorEl.hidden = false;
+        document.getElementById('cal-retry').onclick = () => location.reload();
+        return;
+    }
+
+    // Hata seçici yalnızca 'Yapıldı' durumunda görünür; kaydedilen hatalar öğrenci profiline düşer
+    const mistakesEl = document.getElementById('detail_mistakes');
+    const statusEl = document.getElementById('detail_status');
+    function syncMistakes() { if (mistakesEl) mistakesEl.hidden = statusEl.value !== 'yapildi'; }
+    statusEl.addEventListener('change', syncMistakes);
+
+    let fetchSeq = 0;
+    const narrow = window.innerWidth < 768;
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: narrow ? 'listWeek' : 'timeGridWeek',
+        headerToolbar: narrow
+            ? { left: 'prev,next', center: 'title', right: 'today' }
+            : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
+        footerToolbar: narrow ? { center: 'dayGridMonth,timeGridWeek,listWeek' } : false,
+        buttonText: { today: 'Bugün', month: 'Ay', week: 'Hafta', list: 'Liste' },
+        locale: 'tr',
+        firstDay: 1,
+        nowIndicator: true,
+        allDaySlot: false,
+        slotMinTime: '08:00:00',
+        slotMaxTime: '23:00:00',
+        slotDuration: '00:30:00',
+        height: 'auto',
+        noEventsText: 'Bu aralıkta ders yok',
+        eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+        slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+
+        loading: function (isLoading) {
+            if (isLoading) { errorEl.hidden = true; }
+            else { loadingEl.hidden = true; }
+        },
+
+        events: function (info, success, failure) {
+            // Üst üste gelen isteklerde yalnızca en sonuncusunun sonucu sayılır
+            const id = ++fetchSeq;
+            fetch('{{ url_for("api_lessons") }}')
+                .then(res => { if (!res.ok) throw new Error(res.status); return res.json(); })
+                .then(data => {
+                    if (id !== fetchSeq) return;
+                    errorEl.hidden = true;
+                    success(data);
+                }, err => {
+                    if (id !== fetchSeq) return;
+                    loadingEl.hidden = true;
+                    errorEl.hidden = false;
+                    failure(err);
+                });
+        },
+
+        dateClick: function (info) {
+            if (!isAdmin) return;
+            let value = info.dateStr;
+            if (value.length === 10) value += 'T16:00';
+            document.getElementById('add_lesson_date').value = value.substring(0, 16);
+            openModal('addLessonModal');
+        },
+
+        eventClick: function (info) {
+            const ev = info.event;
+            const p = ev.extendedProps;
+            document.getElementById('detailTitle').textContent = p.studentName || ev.title;
+            document.getElementById('detailWhen').textContent = fmt.format(ev.start) + ' · ' + p.duration + ' dk';
+            document.getElementById('detail_lesson_id').value = ev.id;
+            document.getElementById('detail_status').value = p.status || 'planlandi';
+            document.getElementById('detail_topic').value = p.topic || '';
+            document.getElementById('detail_homework').value = p.homework || '';
+            document.getElementById('detail_notes').value = p.notes || '';
+            document.querySelectorAll('#detail_mistakes input').forEach(b => b.checked = false);
+            syncMistakes();
+            const del = document.getElementById('deleteLessonForm');
+            if (del) del.action = '{{ url_for("delete_lesson", lesson_id=0) }}'.replace(/0$/, ev.id);
+            openModal('lessonDetailModal');
+        }
+    });
+
+    document.getElementById('cal-retry').addEventListener('click', function () {
+        errorEl.hidden = true;
+        calendar.refetchEvents();
+    });
+
+    calendar.render();
+});
+</script>
+{% endblock %}

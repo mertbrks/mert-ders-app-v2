@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_theme_head.html' %}
+    <title>Giriş · Mert Ders Takip</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=9">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='4' y='4' width='8' height='8' rx='2' fill='%23C8693F'/%3E%3C/svg%3E">
+</head>
+<body>
+    <div class="corner-tools">{% include '_theme_button.html' %}</div>
+    <main class="login-wrap">
+        <div class="login reveal">
+            <div>
+                <h1>Mert Ders Takip</h1>
+                <p class="sub">Ders programı, öğrenci notları ve tahsilatlar.</p>
+            </div>
+
+            <div>
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% for category, message in messages %}
+                    <p class="login-msg" role="alert">{{ message }}</p>
+                    {% endfor %}
+                {% endwith %}
+
+                <form action="{{ url_for('login') }}" method="POST" class="form-stack">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="field">
+                        <span>Yönetici şifresi</span>
+                        <input type="password" name="password" class="input" autocomplete="current-password" autofocus>
+                    </label>
+                    <button type="submit" name="action" value="admin" class="btn btn-primary btn-block">Giriş yap</button>
+                </form>
+
+                <div class="divider">ya da</div>
+
+                <form action="{{ url_for('login') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" name="action" value="visitor" class="btn btn-block">Ziyaretçi olarak göz at</button>
+                </form>
+                <p class="hint" style="margin-top:12px">Ziyaretçiler programı görür; ücretleri, veli telefonlarını göremez ve değişiklik yapamaz.</p>
+            </div>
+        </div>
+    </main>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=9"></script>
+</body>
+</html>

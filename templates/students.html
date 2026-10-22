@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf_field, student_fields with context %}
+
+{% block title %}Öğrenciler{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Öğrenciler</h1>
+        <p class="sub">{{ students|length }} kayıtlı öğrenci</p>
+    </div>
+    {% if is_admin and students %}
+    <div class="actions">
+        <button type="button" class="btn btn-primary" data-open="addStudentModal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Öğrenci ekle</button>
+    </div>
+    {% endif %}
+</div>
+
+{% if students %}
+<div class="grid grid-cards reveal">
+    {% for student in students %}
+    <article class="card">
+        <div class="card-body">
+            <div class="card-top">
+                <div>
+                    <h2 class="card-title"><a href="{{ url_for('student_profile', id=student.id) }}">{{ student.full_name }}</a></h2>
+                    <p class="card-meta">{{ student.grade_level or 'Seviye belirtilmedi' }}</p>
+                </div>
+                {% if is_admin %}
+                <button type="button" class="icon-btn" aria-label="{{ student.full_name }} bilgilerini düzenle"
+                    data-edit-student
+                    data-id="{{ student.id }}"
+                    data-full_name="{{ student.full_name }}"
+                    data-grade_level="{{ student.grade_level or '' }}"
+                    data-parent_contact="{{ student.parent_contact or '' }}"
+                    data-hourly_rate="{{ student.hourly_rate }}"
+                    data-default_duration="{{ student.default_duration or 60 }}"
+                    data-notes="{{ student.notes or '' }}">
+                    <i class="bi bi-pencil" aria-hidden="true"></i>
+                </button>
+                {% endif %}
+            </div>
+
+            <dl class="facts">
+                {% if is_admin %}
+                <dt>Veli</dt>
+                <dd class="num">{{ student.parent_contact or '—' }}</dd>
+                <dt>Ücret</dt>
+                <dd class="num">{{ student.hourly_rate|tl }}</dd>
+                {% endif %}
+                <dt>Süre</dt>
+                <dd class="num">{{ student.default_duration or 60 }} dk</dd>
+            </dl>
+
+            {% if student.notes and is_admin %}
+            <p class="note">{{ student.notes }}</p>
+            {% endif %}
+        </div>
+        <div class="card-foot">
+            {% if is_admin and student.unpaid_count %}
+            <span class="owed num">{{ student.unpaid_count }} ders ödenmedi</span>
+            {% else %}
+            <span class="hint">{% if is_admin %}Ödemeler güncel{% endif %}</span>
+            {% endif %}
+            <a href="{{ url_for('student_profile', id=student.id) }}" class="link">Ders geçmişi</a>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<div class="panel">
+    <div class="empty">
+        <h3>Henüz öğrenci yok</h3>
+        <p>İlk öğrenciyi ekle; ders planlama ve tahsilat takibi buradan başlıyor.</p>
+        {% if is_admin %}
+        <button type="button" class="btn btn-primary" data-open="addStudentModal">Öğrenci ekle</button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if is_admin %}
+<dialog class="modal" id="addStudentModal" aria-labelledby="addStudentTitle">
+    <form action="{{ url_for('add_student') }}" method="POST">
+        {{ csrf_field() }}
+        <div class="modal-head">
+            <h2 id="addStudentTitle">Yeni öğrenci</h2>
+            <button type="button" class="icon-btn" data-close aria-label="Kapat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">{{ student_fields(prefix='add_') }}</div>
+        <div class="modal-foot">
+            <button type="button" class="btn btn-quiet" data-close>Vazgeç</button>
+            <button type="submit" class="btn btn-primary">Kaydet</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog class="modal" id="editStudentModal" aria-labelledby="editStudentTitle">
+    <form method="POST" id="editStudentForm">
+        {{ csrf_field() }}
+        <div class="modal-head">
+            <h2 id="editStudentTitle">Öğrenciyi düzenle</h2>
+            <button type="button" class="icon-btn" data-close aria-label="Kapat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">{{ student_fields(prefix='edit_') }}</div>
+        <div class="modal-foot">
+            <button type="button" class="btn btn-quiet" data-close>Vazgeç</button>
+            <button type="submit" class="btn btn-primary">Değişiklikleri kaydet</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if is_admin %}
+<script>
+document.querySelectorAll('[data-edit-student]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        const form = document.getElementById('editStudentForm');
+        form.action = '{{ url_for("edit_student", id=0) }}'.replace(/0$/, btn.dataset.id);
+        ['full_name', 'grade_level', 'parent_contact', 'hourly_rate', 'default_duration', 'notes'].forEach(function (key) {
+            document.getElementById('edit_' + key).value = btn.dataset[key] || '';
+        });
+        openModal('editStudentModal');
+    });
+});
+</script>
+{% endif %}
+{% endblock %}
