@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf_field with context %}
+
+{% block title %}Kaynaklar{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Kaynaklar</h1>
+        <p class="sub">Testler, PDF'ler ve ders videoları — seviyeye göre.</p>
+    </div>
+    {% if is_admin and resources %}
+    <div class="actions">
+        <button type="button" class="btn btn-primary" data-open="addResourceModal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Kaynak ekle</button>
+    </div>
+    {% endif %}
+</div>
+
+{% if resources %}
+<div class="grid grid-cards reveal">
+    {% for res in resources %}
+    <article class="card">
+        <div class="card-body">
+            <div class="card-top">
+                <div>
+                    <h2 class="card-title">{{ res.title }}</h2>
+                    <p class="card-meta">{{ res.grade_level or 'Genel' }}</p>
+                </div>
+                {% if is_admin %}
+                <form action="{{ url_for('delete_resource', id=res.id) }}" method="POST" data-confirm="“{{ res.title }}” silinsin mi?">
+                    {{ csrf_field() }}
+                    <button type="submit" class="icon-btn is-danger" aria-label="{{ res.title }} kaynağını sil"><i class="bi bi-trash3" aria-hidden="true"></i></button>
+                </form>
+                {% endif %}
+            </div>
+            {% if res.notes %}<p class="note">{{ res.notes }}</p>{% endif %}
+        </div>
+        {% if res.url %}
+        <div class="card-foot">
+            <span class="hint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ res.url.split('/')[2] if res.url.count('/') >= 2 else res.url }}</span>
+            <a href="{{ res.url }}" target="_blank" rel="noopener noreferrer" class="link" style="white-space:nowrap">Aç <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+        </div>
+        {% endif %}
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<div class="panel">
+    <div class="empty">
+        <h3>Henüz kaynak yok</h3>
+        <p>Derslerde kullandığın bağlantıları buraya ekle, her seferinde aramak zorunda kalma.</p>
+        {% if is_admin %}<button type="button" class="btn btn-primary" data-open="addResourceModal">Kaynak ekle</button>{% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if is_admin %}
+<dialog class="modal" id="addResourceModal" aria-labelledby="addResourceTitle">
+    <form action="{{ url_for('add_resource') }}" method="POST">
+        {{ csrf_field() }}
+        <div class="modal-head">
+            <h2 id="addResourceTitle">Yeni kaynak</h2>
+            <button type="button" class="icon-btn" data-close aria-label="Kapat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body form-stack">
+            <label class="field">
+                <span>Ad</span>
+                <input type="text" name="title" class="input" placeholder="Örn. 11. sınıf fizik soru bankası" required>
+            </label>
+            <label class="field">
+                <span>Bağlantı</span>
+                <input type="url" name="url" class="input" placeholder="https://">
+            </label>
+            <label class="field">
+                <span>Seviye</span>
+                <input type="text" name="grade_level" class="input" placeholder="Örn. YKS, LGS, 9. sınıf">
+            </label>
+            <label class="field">
+                <span>Not</span>
+                <textarea name="notes" rows="2" class="input" placeholder="Hangi konu için, kime verildi"></textarea>
+            </label>
+        </div>
+        <div class="modal-foot">
+            <button type="button" class="btn btn-quiet" data-close>Vazgeç</button>
+            <button type="submit" class="btn btn-primary">Kaydet</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf_field with context %}
+
+{% block title %}Ödemeler{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Ödemeler</h1>
+        <p class="sub">Yapılan ama ücreti alınmamış dersler ve son tahsilatlar.</p>
+    </div>
+</div>
+
+<section class="summary is-3 reveal" aria-label="Özet">
+    <div class="hero">
+        <span class="label">Alacağın</span>
+        <div class="hero-value">{% if is_admin %}{{ total_unpaid|tl }}{% else %}<span class="masked">gizli</span>{% endif %}</div>
+        <p class="hero-note">{{ unpaid_lessons|length }} ders ödeme bekliyor</p>
+    </div>
+    <div>
+        <span class="label">Son {{ paid_lessons|length }} tahsilat</span>
+        <div class="small-value num">{% if is_admin %}{{ total_collected|tl }}{% else %}<span class="masked">gizli</span>{% endif %}</div>
+    </div>
+    <div>
+        <span class="label">Ödemesi gelen öğrenci</span>
+        <div class="small-value num">{{ unpaid_lessons|map(attribute='student_id')|unique|list|length }}</div>
+    </div>
+</section>
+
+<div class="grid grid-pay">
+    <section class="panel" aria-labelledby="unpaid-title">
+        <div class="panel-head">
+            <h2 id="unpaid-title">Ödeme bekleyenler</h2>
+            <span class="meta">Eskiden yeniye</span>
+        </div>
+
+        {% if unpaid_lessons %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">Öğrenci</th>
+                        <th scope="col">Ders</th>
+                        <th scope="col" class="r">Tutar</th>
+                        {% if is_admin %}<th scope="col" class="r"><span class="sr-only">İşlem</span></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lesson in unpaid_lessons %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('student_profile', id=lesson.student_id) }}" class="row-title">{{ lesson.full_name }}</a>
+                            {% if lesson.topic %}<div class="muted">{{ lesson.topic }}</div>{% endif %}
+                        </td>
+                        <td class="num" style="white-space:nowrap">{{ lesson.lesson_date|tarih }}</td>
+                        <td class="r num" style="white-space:nowrap">{% if is_admin %}{{ lesson.hourly_rate|tl }}{% else %}<span class="masked">—</span>{% endif %}</td>
+                        {% if is_admin %}
+                        <td class="r">
+                            <form action="{{ url_for('pay_lesson', lesson_id=lesson.lesson_id) }}" method="POST">
+                                {{ csrf_field() }}
+                                <button type="submit" class="btn btn-sm">Tahsil et</button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">
+            <h3>Bekleyen ödeme yok</h3>
+            <p>Yapılan tüm derslerin ücreti alınmış. Bir dersi "Yapıldı" olarak işaretlediğinde burada görünür.</p>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="panel" aria-labelledby="paid-title">
+        <div class="panel-head">
+            <h2 id="paid-title">Son tahsilatlar</h2>
+            <span class="meta">Son 20</span>
+        </div>
+
+        {% if paid_lessons %}
+        <ul class="rows">
+            {% for p in paid_lessons %}
+            <li class="row">
+                <div class="row-main">
+                    <div class="row-title">{{ p.full_name }}</div>
+                    <div class="row-sub num">{{ p.payment_date|tarih }}</div>
+                </div>
+                <div class="row-end">
+                    <span class="num">{% if is_admin %}{{ p.amount|tl }}{% else %}<span class="masked">—</span>{% endif %}</span>
+                    {% if is_admin %}
+                    <form action="{{ url_for('undo_payment', payment_id=p.payment_id) }}" method="POST" data-confirm="{{ p.full_name }} tahsilatı geri alınsın mı? Ders tekrar ödeme bekleyenlere düşer.">
+                        {{ csrf_field() }}
+                        <button type="submit" class="icon-btn" aria-label="Tahsilatı geri al" title="Geri al"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+                    </form>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="empty">
+            <h3>Henüz tahsilat yok</h3>
+            <p>Soldaki listeden "Tahsil et" dediğin ödemeler burada listelenir.</p>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

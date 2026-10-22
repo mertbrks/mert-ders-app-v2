@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf_field, student_fields, status_label, mistake_picker with context %}
+
+{% block title %}{{ student.full_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <a href="{{ url_for('students') }}" class="back-link"><i class="bi bi-arrow-left" aria-hidden="true"></i> Öğrenciler</a>
+        <h1>{{ student.full_name }}</h1>
+        <p class="sub">{{ student.grade_level or 'Seviye belirtilmedi' }}</p>
+    </div>
+    {% if is_admin %}
+    <div class="actions">
+        <button type="button" class="btn" data-open="editStudentModal">Düzenle</button>
+        {% if wa_link %}
+        <a href="{{ wa_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary"><i class="bi bi-whatsapp" aria-hidden="true"></i> Veliye yaz</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="grid grid-profile">
+    <div class="stack">
+        <section class="panel" aria-labelledby="info-title">
+            <div class="panel-head"><h2 id="info-title">Bilgiler</h2></div>
+            <div class="panel-body">
+                <dl class="facts" style="margin-top:0">
+                    {% if is_admin %}
+                    <dt>Veli</dt>
+                    <dd class="num">{{ student.parent_contact or '—' }}</dd>
+                    <dt>Ücret</dt>
+                    <dd class="num">{{ student.hourly_rate|tl }}</dd>
+                    {% endif %}
+                    <dt>Süre</dt>
+                    <dd class="num">{{ student.default_duration or 60 }} dk</dd>
+                    <dt>Toplam ders</dt>
+                    <dd class="num">{{ stats.total_lessons or 0 }}</dd>
+                    <dt>Yapılan</dt>
+                    <dd class="num">{{ stats.done_lessons or 0 }}</dd>
+                </dl>
+
+                {% if is_admin %}
+                <div class="balance-box {% if pending_balance > 0 %}has-debt{% endif %}">
+                    <span class="label">Bekleyen ödeme</span>
+                    {% if pending_balance > 0 %}
+                    <div class="small-value num">{{ pending_balance|tl }}</div>
+                    <p class="hint">{{ unpaid_count }} dersin ödemesi alınmadı · <a class="link" href="{{ url_for('payments') }}">Tahsil et</a></p>
+                    {% else %}
+                    <div class="small-value">Yok</div>
+                    <p class="hint">Tüm dersler ödendi.</p>
+                    {% endif %}
+                </div>
+
+                {% if student.notes %}
+                <p class="note" style="margin-top:16px">{{ student.notes }}</p>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% if is_admin %}
+            <div class="panel-foot">
+                <button type="button" class="btn btn-danger btn-sm" data-open="deleteStudentModal">Öğrenciyi sil</button>
+            </div>
+            {% endif %}
+        </section>
+
+        {% if is_admin %}
+        <section class="panel" aria-labelledby="mistakes-title">
+            <div class="panel-head">
+                <h2 id="mistakes-title">Hatalar</h2>
+                <span class="meta num">{{ mistakes|length }}</span>
+            </div>
+            <div class="panel-body">
+                <form action="{{ url_for('add_student_mistakes', id=student.id) }}" method="POST" class="form-stack">
+                    {{ csrf_field() }}
+                    {{ mistake_picker() }}
+                    <div class="field-row">
+                        <label class="field">
+                            <span>Konu</span>
+                            <input type="text" name="topic" class="input" maxlength="200" placeholder="Örn. Kesirler">
+                        </label>
+                        <label class="field">
+                            <span>Not</span>
+                            <input type="text" name="note" class="input" maxlength="500" placeholder="Örn. Paydaları topladı">
+                        </label>
+                    </div>
+                    <div><button type="submit" class="btn">Hata ekle</button></div>
+                </form>
+
+                {% if mistakes %}
+                <ul class="note-list">
+                    {% for m in mistakes %}
+                    <li class="note-item">
+                        <p><strong>{{ mistake_types.get(m.mistake_type, m.mistake_type) }}</strong>{% if m.topic %} · {{ m.topic }}{% endif %}{% if m.note %}<br>{{ m.note }}{% endif %}<time>{{ m.created_at|tarih }}</time></p>
+                        <form action="{{ url_for('delete_mistake', mistake_id=m.id) }}" method="POST">
+                            {{ csrf_field() }}
+                            <button type="submit" class="icon-btn is-danger" aria-label="Hata kaydını sil"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="hint" style="margin-top:12px">Henüz hata kaydı yok. Ders sonunda ya da buradan ekle.</p>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+    </div>
+
+    <div class="stack">
+    {% if hmap and (hmap.turler or hmap.tekrar) %}
+    <section class="panel" aria-labelledby="hmap-title">
+        <div class="panel-head">
+            <h2 id="hmap-title">Hata haritası</h2>
+            <span class="meta">Son 90 gün</span>
+        </div>
+        <div class="panel-body">
+            {% if hmap.tekrar %}
+            <h3 class="hmap-sub">Bu derste tekrar et</h3>
+            <ul class="hmap-due">
+                {% for g in hmap.tekrar[:5] %}
+                <li><strong>{{ mistake_types.get(g.tur, g.tur) }}</strong>{% if g.konu %} · {{ g.konu }}{% endif %}
+                    <span class="hint num">{{ g.sayi }} kez · son {{ g.son|tarih }}</span></li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if hmap.turler %}
+            {% set enfazla = hmap.turler[0].sayi %}
+            <h3 class="hmap-sub">Tekrarlanan hata türleri</h3>
+            <ul class="hmap">
+                {% for t in hmap.turler %}
+                <li class="hmap-row">
+                    <span class="hmap-label">{{ mistake_types.get(t.tur, t.tur) }}</span>
+                    <span class="hmap-track" aria-hidden="true"><span class="hmap-bar" style="width: {{ (t.sayi / enfazla * 100)|round }}%"></span></span>
+                    <span class="hmap-count num">{{ t.sayi }}</span>
+                    <span class="hmap-meta hint">
+                        {% for konu, n in t.konular[:3] %}{{ konu }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}
+                        {% if t.konular %} — {% endif %}<span class="num">bu ay {{ t.bu_ay }}, geçen ay {{ t.gecen_ay }}</span>
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% if istekler %}
+        <div class="panel-foot claude-copy">
+            <span class="hint">Claude'a yapıştır (ad ve veli bilgisi girmez):</span>
+            <button type="button" class="btn btn-sm" data-copy="istek-soru"><i class="bi bi-clipboard" aria-hidden="true"></i> Soru isteği</button>
+            <button type="button" class="btn btn-sm" data-copy="istek-rapor"><i class="bi bi-clipboard" aria-hidden="true"></i> Veli raporu isteği</button>
+            <details class="claude-preview">
+                <summary class="hint">Ne kopyalanıyor?</summary>
+                <textarea id="istek-soru" class="input" rows="8" readonly>{{ istekler.soru }}</textarea>
+                <textarea id="istek-rapor" class="input" rows="8" readonly>{{ istekler.rapor }}</textarea>
+            </details>
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="panel" aria-labelledby="history-title">
+        <div class="panel-head">
+            <h2 id="history-title">Ders geçmişi</h2>
+            <span class="meta num">{{ lessons|length }} kayıt</span>
+        </div>
+
+        {% if lessons %}
+        <ol class="rows reveal">
+            {% for lesson in lessons %}
+            <li class="history-item {% if lesson.status == 'iptal' %}is-cancelled{% endif %}">
+                <div class="history-top">
+                    <span class="history-date num">{{ lesson.lesson_date|tarih }}<small>{{ lesson.duration_minutes or 60 }} dk</small></span>
+                    {{ status_label(lesson.status) }}
+                </div>
+                {% if lesson.topic or lesson.homework or lesson.notes %}
+                <dl class="history-grid">
+                    {% if lesson.topic %}<dt>Konu</dt><dd>{{ lesson.topic }}</dd>{% endif %}
+                    {% if lesson.homework %}<dt>Ödev</dt><dd>{{ lesson.homework }}</dd>{% endif %}
+                    {% if lesson.notes %}<dt>Not</dt><dd>{{ lesson.notes }}</dd>{% endif %}
+                </dl>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div class="empty">
+            <h3>Henüz ders yok</h3>
+            <p>Takvimden {{ student.full_name }} için ilk dersi planla; konu ve ödevler burada birikecek.</p>
+            {% if is_admin %}<a href="{{ url_for('schedule') }}" class="btn">Ders planla</a>{% endif %}
+        </div>
+        {% endif %}
+    </section>
+    </div>
+</div>
+
+{% if is_admin %}
+<dialog class="modal" id="editStudentModal" aria-labelledby="editStudentTitle">
+    <form action="{{ url_for('edit_student', id=student.id) }}" method="POST">
+        {{ csrf_field() }}
+        <div class="modal-head">
+            <h2 id="editStudentTitle">Öğrenciyi düzenle</h2>
+            <button type="button" class="icon-btn" data-close aria-label="Kapat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">{{ student_fields(student, prefix='edit_') }}</div>
+        <div class="modal-foot">
+            <button type="button" class="btn btn-quiet" data-close>Vazgeç</button>
+            <button type="submit" class="btn btn-primary">Değişiklikleri kaydet</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog class="modal" id="deleteStudentModal" aria-labelledby="deleteStudentTitle">
+    <form action="{{ url_for('delete_student', id=student.id) }}" method="POST">
+        {{ csrf_field() }}
+        <div class="modal-head">
+            <h2 id="deleteStudentTitle">{{ student.full_name }} silinsin mi?</h2>
+        </div>
+        <div class="modal-body">
+            <p>Öğrencinin {{ stats.total_lessons or 0 }} dersi ve bu derslere ait tüm tahsilat kayıtları da silinecek. Bu işlem geri alınamaz.</p>
+        </div>
+        <div class="modal-foot">
+            <button type="button" class="btn btn-quiet" data-close>Vazgeç</button>
+            <button type="submit" class="btn btn-danger-solid">Kalıcı olarak sil</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Panoya kopyala; izin yoksa metni seçili bırak (elle Ctrl+C)
+document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+        const box = document.getElementById(btn.dataset.copy);
+        try {
+            await navigator.clipboard.writeText(box.value);
+            toast("Kopyalandı. Claude'a yapıştırabilirsin.", 'success');
+        } catch (err) {
+            box.closest('details').open = true;
+            box.select();
+            toast('Otomatik kopyalanamadı; seçili metni Ctrl+C ile kopyala.', 'warning');
+        }
+    });
+});
+</script>
+{% endblock %}
