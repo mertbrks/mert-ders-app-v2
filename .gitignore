@@ -1,0 +1,5 @@
+# Yerel veritabanı ve arşivler repoya girmez
+*.db
+*.zip
+__pycache__/
+.env
