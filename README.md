@@ -6,6 +6,24 @@ Kendi matematik özel derslerimde öğrencileri, ders programını, ödemeleri v
 
 *A Flask + PostgreSQL web app I built and use daily to run my private math tutoring: students, schedule, payments, a mistake-tracking module with spaced repetition, and a rule-based Turkish voice command parser.*
 
+## Ekran görüntüleri
+
+*Görüntüler sahte demo verisiyle alındı; gerçek öğrenci bilgisi içermez.*
+
+**Bugün:** alacak, aylık tahsilat, günün programı ve o gün tekrar edilmesi gereken hatalar
+![Ana sayfa](docs/ekran/anasayfa.png)
+
+**Öğrenci profili ve Hata Haritası:** hata türleri, konular, aralıklı tekrar listesi, ders geçmişi
+![Öğrenci profili](docs/ekran/profil.png)
+
+**Takvim**
+![Takvim](docs/ekran/takvim.png)
+
+**Ödemeler**
+![Ödemeler](docs/ekran/odemeler.png)
+
+<img src="docs/ekran/mobil.png" alt="Telefonda ana sayfa" width="300">
+
 ## Ne yapıyor
 
 - **Öğrenciler:** sınıf, veli iletişimi, saatlik ücret, varsayılan ders süresi, notlar.
